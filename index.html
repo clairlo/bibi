@@ -131,6 +131,21 @@
   .seg button.on{background:var(--paper);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.06);}
   .chart-foot{font-size:12px;color:var(--muted);text-align:center;margin-top:12px;}
 
+  /* Weight card */
+  .whead{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:12px;}
+  .wtop{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:12px;}
+  .wnum{font-size:34px;font-weight:800;letter-spacing:-1px;line-height:1;}
+  .wnum small{font-size:14px;font-weight:600;color:var(--muted);margin-left:4px;letter-spacing:0;}
+  .wdelta{font-size:13px;color:var(--muted);font-weight:600;text-align:right;}
+  .wchart{margin-top:10px;}
+  .wchart svg{display:block;width:100%;height:auto;}
+  .wchart .gridline{stroke:#EDE6DA;stroke-width:1;}
+  .wchart .wline{fill:none;stroke:var(--accent);stroke-width:2.5;stroke-linejoin:round;stroke-linecap:round;}
+  .wchart .wdot{fill:#fff;stroke:var(--accent);stroke-width:2.5;cursor:pointer;}
+  .wchart .wdot.cur{fill:var(--accent);}
+  .wchart .axt{fill:var(--muted);font-size:9px;font-family:inherit;}
+  .wclear{cursor:pointer;text-decoration:underline;}
+
   /* Settings */
   .settings{display:none;}
   .settings.open{display:block;}
@@ -192,6 +207,23 @@
     <div class="breakdown" id="breakdown"></div>
   </div>
 
+  <!-- Weight (record) -->
+  <div class="card">
+    <h2>體重</h2>
+    <div class="wtop">
+      <div class="wnum"><span id="wValue">—</span><small>kg</small></div>
+      <div class="wdelta" id="wDelta"></div>
+    </div>
+    <div class="add-row">
+      <div class="amt">
+        <input type="number" id="wInput" inputmode="decimal" min="0" step="0.01" placeholder="體重">
+        <span class="unit">kg</span>
+      </div>
+      <button class="add-btn" id="wBtn">記錄</button>
+    </div>
+    <div class="live-kcal" id="wHint"></div>
+  </div>
+
   <!-- Add -->
   <div class="card">
     <h2>新增一筆</h2>
@@ -209,18 +241,18 @@
   <!-- Entries -->
   <div class="entries" id="entries"></div>
 
-  <!-- Weekly chart -->
+  <!-- Compare chart -->
   <div class="card" style="margin-top:16px;">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:8px;">
-      <h2 style="margin:0;">熱量趨勢</h2>
-      <div class="seg" id="rangeSeg">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;gap:8px;">
+      <h2 style="margin:0;">熱量 × 體重對照</h2>
+      <div class="seg" id="cmpRangeSeg">
         <button data-r="7" class="on">7天</button>
         <button data-r="14">14天</button>
         <button data-r="30">30天</button>
       </div>
     </div>
-    <div class="chart" id="chart"></div>
-    <div class="chart-foot" id="chartFoot"></div>
+    <div id="cmpChart"></div>
+    <div class="chart-foot" id="cmpFoot"></div>
   </div>
 
   <!-- Settings -->
@@ -281,6 +313,8 @@ function loadState(){
   if(!s.migratedV2){ if(s.target == null) s.target = 200; s.migratedV2 = true; }
   if(!s.logs || typeof s.logs !== 'object') s.logs = {};
   if(![7,14,30].includes(s.chartRange)) s.chartRange = 7;
+  if(!s.weights || typeof s.weights !== 'object') s.weights = {};
+  if(![14,30,0].includes(s.weightRange)) s.weightRange = 30;
   return s;
 }
 let state = loadState();
@@ -408,73 +442,95 @@ function renderEntries(){
   });
 }
 
-function renderChart(){
-  const box = $('chart'); box.innerHTML='';
+function renderCompare(){
+  const box=$('cmpChart'), foot=$('cmpFoot');
   const range = state.chartRange || 7;
-  const dense = range > 7;
   const target = state.target && state.target>0 ? state.target : null;
+  const step = range<=7?1:(range<=14?2:5);
 
-  const days=[];
-  const base = parseYmd(current);
-  for(let i=range-1;i>=0;i--){ const d=new Date(base); d.setDate(base.getDate()-i); days.push(d); }
-  const totals = days.map(d=>dayTotal(ymd(d)));
-  // 讓目標線一定在圖內:上限取「最大值」與「目標」較大者,再留一點頭部空間
-  const scaleMax = Math.max(...totals, target||0, 1) * 1.12;
-  const step = range<=7 ? 1 : (range<=14 ? 2 : 5);
+  // 共用時間軸:以目前日期為右端,往前 range 天
+  const days=[]; const base=parseYmd(current);
+  for(let i=range-1;i>=0;i--){ const d=new Date(base); d.setDate(base.getDate()-i); days.push(ymd(d)); }
+  const totals = days.map(d=>dayTotal(d));
+  const calMax = Math.max(...totals, target||0, 1)*1.12;
 
-  // 繪圖區
-  const plot = document.createElement('div');
-  plot.className = 'plot' + (dense?' dense':'');
-  days.forEach((d,i)=>{
-    const t = totals[i];
-    const isToday = ymd(d)===todayStr;
-    const h = Math.round(t/scaleMax*100);
-    const st = statusFor(t, target);
-    const cls = (t>0 && st) ? ' '+st.key : '';
-    const col = document.createElement('div');
-    col.className='col'+(isToday?' is-today':'');
-    col.title = `${d.getMonth()+1}/${d.getDate()}  ${Math.round(t)} kcal` + (st? ' ・ '+st.label.replace(/<[^>]+>/g,'') : '');
-    col.innerHTML = `<div class="bar${cls}" style="height:${t?Math.max(h,3):0}%">${t?`<span class="v">${Math.round(t)}</span>`:''}</div>`;
-    col.onclick = ()=>{ current=ymd(d); refresh(); };
-    plot.appendChild(col);
-  });
-  // 目標虛線
+  // 幾何
+  const VW=340, padL=34, padR=12;
+  const plotW=VW-padL-padR, colW=plotW/range;
+  const cx=i=>padL+(i+0.5)*colW;
+  const yC0=24, calH=92, baseC=yC0+calH;
+  const yW0=baseC+30, wH=78;
+  const xLabelY=yW0+wH+16, VH=xLabelY+6;
+  const barW=Math.min(colW*0.62, 26);
+
+  let svg=`<svg viewBox="0 0 ${VW} ${VH}" preserveAspectRatio="xMidYMid meet" style="width:100%;height:auto;">`;
+  svg+=`<text x="${padL}" y="${yC0-8}" style="fill:var(--muted);font-size:10px;">熱量 kcal</text>`;
+  svg+=`<text x="${padL}" y="${yW0-8}" style="fill:var(--muted);font-size:10px;">體重 kg</text>`;
+
+  // 熱量目標虛線 + 基線
   if(target){
-    const line = document.createElement('div');
-    line.className='target-line';
-    line.style.bottom = (target/scaleMax*100)+'%';
-    line.innerHTML = `<span class="tl-tag">目標 ${target}</span>`;
-    plot.appendChild(line);
+    const ty=baseC-target/calMax*calH;
+    svg+=`<line x1="${padL}" y1="${ty.toFixed(1)}" x2="${VW-padR}" y2="${ty.toFixed(1)}" stroke="#B7AE9E" stroke-width="1.5" stroke-dasharray="5 4"/>`;
+    svg+=`<text x="${VW-padR}" y="${(ty-4).toFixed(1)}" text-anchor="end" style="fill:var(--muted);font-size:9px;">目標 ${target}</text>`;
   }
-  box.appendChild(plot);
+  svg+=`<line x1="${padL}" y1="${baseC}" x2="${VW-padR}" y2="${baseC}" stroke="#EDE6DA" stroke-width="1"/>`;
 
-  // x 軸日期
-  const xrow = document.createElement('div');
-  xrow.className='xrow'+(dense?' dense':'');
+  // 熱量長條
+  const fillFor=(t)=>{
+    if(!target) return 'var(--c-kibble)';
+    const st=statusFor(t,target);
+    return st ? `var(--${st.key==='under'?'c-kibble':st.key==='met'?'good':'warn'})` : 'var(--c-kibble)';
+  };
   days.forEach((d,i)=>{
-    const isToday = ymd(d)===todayStr;
-    const show = (i%step===0) || isToday || i===days.length-1;
-    const cell = document.createElement('div');
-    cell.className='xcell'+(isToday?' is-today':'')+(show?'':' hide');
-    cell.textContent = `${d.getMonth()+1}/${d.getDate()}`;
-    xrow.appendChild(cell);
+    const t=totals[i]; if(!t) return;
+    const bh=Math.max(t/calMax*calH,2), x=cx(i)-barW/2, y=baseC-bh, isToday=d===todayStr;
+    svg+=`<rect data-d="${d}" x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${bh.toFixed(1)}" rx="4" fill="${fillFor(t)}" ${isToday?'stroke="rgba(51,48,42,.28)" stroke-width="1.5"':''}><title>${fmtMD(d)} ${Math.round(t)} kcal</title></rect>`;
+    if(range<=7) svg+=`<text x="${cx(i).toFixed(1)}" y="${(y-4).toFixed(1)}" text-anchor="middle" style="fill:var(--muted);font-size:9px;">${Math.round(t)}</text>`;
   });
-  box.appendChild(xrow);
 
-  // 期間統計
-  const eaten = totals.filter(t=>t>0);
-  const avgAll = totals.reduce((s,t)=>s+t,0)/range;
-  let footer;
-  if(!eaten.length){
-    footer = `這 ${range} 天還沒有紀錄`;
-  } else {
-    footer = `平均 ${Math.round(avgAll)} kcal/天`;
-    if(target){
-      const metDays = totals.filter(t=>t>=target*0.9 && t<=target*1.1).length;
-      footer += `・達標 ${metDays}/${range} 天`;
+  // 體重折線
+  const wpts=days.map((d,i)=>({i,d,kg:state.weights[d]})).filter(p=>p.kg!=null);
+  if(wpts.length){
+    const kgs=wpts.map(p=>p.kg);
+    let minK=Math.min(...kgs), maxK=Math.max(...kgs);
+    if(minK===maxK){ minK-=0.3; maxK+=0.3; } else { const pk=(maxK-minK)*0.3; minK-=pk; maxK+=pk; }
+    const yW=k=>yW0+(1-(k-minK)/(maxK-minK))*wH;
+    [maxK,(maxK+minK)/2,minK].forEach(k=>{
+      const y=yW(k);
+      svg+=`<line x1="${padL}" y1="${y.toFixed(1)}" x2="${VW-padR}" y2="${y.toFixed(1)}" stroke="#EDE6DA" stroke-width="1"/>`;
+      svg+=`<text x="${padL-4}" y="${(y+3).toFixed(1)}" text-anchor="end" style="fill:var(--muted);font-size:9px;">${Math.round(k*10)/10}</text>`;
+    });
+    if(wpts.length>1){
+      const dp=wpts.map((p,j)=>`${j?'L':'M'}${cx(p.i).toFixed(1)} ${yW(p.kg).toFixed(1)}`).join(' ');
+      svg+=`<path d="${dp}" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>`;
     }
+    wpts.forEach(p=>{
+      const isCur=p.d===current;
+      svg+=`<circle data-d="${p.d}" cx="${cx(p.i).toFixed(1)}" cy="${yW(p.kg).toFixed(1)}" r="${isCur?5:4}" fill="${isCur?'var(--accent)':'#fff'}" stroke="var(--accent)" stroke-width="2.5"><title>${fmtMD(p.d)} ${p.kg} kg</title></circle>`;
+    });
+  } else {
+    svg+=`<text x="${((padL+VW-padR)/2).toFixed(1)}" y="${(yW0+wH/2).toFixed(1)}" text-anchor="middle" style="fill:var(--muted);font-size:11px;">這段期間沒有體重紀錄</text>`;
   }
-  $('chartFoot').textContent = footer;
+
+  // 共用 x 軸
+  days.forEach((d,i)=>{
+    const isToday=d===todayStr, show=(i%step===0)||isToday||i===days.length-1;
+    if(!show) return;
+    svg+=`<text x="${cx(i).toFixed(1)}" y="${xLabelY}" text-anchor="middle" style="fill:${isToday?'var(--accent)':'var(--muted)'};font-size:10px;${isToday?'font-weight:700;':''}">${fmtMD(d)}</text>`;
+  });
+
+  svg+=`</svg>`;
+  box.innerHTML=svg;
+  box.querySelectorAll('[data-d]').forEach(el=>{ el.style.cursor='pointer'; el.onclick=()=>{ current=el.dataset.d; refresh(); }; });
+
+  // footer
+  const eaten=totals.filter(t=>t>0);
+  let l1 = eaten.length ? `熱量 平均 ${Math.round(totals.reduce((s,t)=>s+t,0)/range)} kcal/天` : `熱量 這 ${range} 天沒有紀錄`;
+  if(eaten.length && target){ const m=totals.filter(t=>t>=target*0.9&&t<=target*1.1).length; l1+=`・達標 ${m}/${range}`; }
+  let l2;
+  if(wpts.length){ const lat=wpts[wpts.length-1]; l2=`體重 最新 ${lat.kg} kg`; if(wpts.length>1){ const diff=Math.round((lat.kg-wpts[0].kg)*100)/100; l2+=`・這 ${range} 天 ${diff>0?'+':''}${diff} kg`; } }
+  else l2='體重 這段期間尚無資料';
+  foot.innerHTML = `${l1}<br>${l2}`;
 }
 
 /* ---------- 動作 ---------- */
@@ -549,13 +605,61 @@ function exportCSV(){
       rows.push([date, e.foodName||'', e.amount, e.unit||'', Math.round(e.kcal*100)/100, e.time||'']);
     });
   });
+  Object.keys(state.weights).sort().forEach(date=>{
+    rows.push([date, '體重', state.weights[date], 'kg', '', '']);
+  });
   const csv = '\uFEFF'+rows.map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
   download(`${state.petName}_進食紀錄_${todayStr}.csv`, csv, 'text/csv;charset=utf-8');
 }
 
+/* ---------- 體重 ---------- */
+function weightDates(){ return Object.keys(state.weights).sort(); }
+function prevWeightBefore(date){
+  const ds = weightDates().filter(d=>d<date);
+  return ds.length ? {date:ds[ds.length-1], kg:state.weights[ds[ds.length-1]]} : null;
+}
+function lastWeightUpTo(date){
+  const ds = weightDates().filter(d=>d<=date);
+  return ds.length ? {date:ds[ds.length-1], kg:state.weights[ds[ds.length-1]]} : null;
+}
+function fmtMD(d){ const x=parseYmd(d); return `${x.getMonth()+1}/${x.getDate()}`; }
+
+function renderWeight(){
+  const w = state.weights[current];
+  const wv=$('wValue'), wd=$('wDelta'), wi=$('wInput'), wh=$('wHint');
+  if(w!=null){
+    wv.textContent = (Math.round(w*100)/100);
+    wv.style.color='var(--ink)';
+    if(document.activeElement!==wi) wi.value = w;
+    const p = prevWeightBefore(current);
+    if(p){
+      const diff = Math.round((w-p.kg)*100)/100;
+      const arrow = diff>0?'▲':(diff<0?'▼':'＝');
+      const sign = diff>0?'+':'';
+      const col = diff===0?'var(--muted)':'var(--ink)';
+      wd.innerHTML = `<span style="color:${col}">${arrow} ${sign}${diff} kg</span><br><span style="font-size:11px;">較 ${fmtMD(p.date)}</span>`;
+    } else { wd.innerHTML = `<span style="font-size:12px;">第一筆紀錄</span>`; }
+    wh.innerHTML = `<span class="wclear" id="wClear">刪除這天體重</span>`;
+    const c=$('wClear'); if(c) c.onclick=()=>{ delete state.weights[current]; save(); renderWeight(); renderCompare(); };
+  } else {
+    wv.textContent='—'; wv.style.color='var(--muted)';
+    if(document.activeElement!==wi) wi.value='';
+    const last = lastWeightUpTo(current);
+    wd.innerHTML = last ? `<span style="font-size:12px;">上次 ${last.kg} kg・${fmtMD(last.date)}</span>` : '';
+    wh.textContent = last ? '' : '尚未記錄體重';
+  }
+}
+
+function recordWeight(){
+  const v = parseFloat($('wInput').value);
+  if(!(v>0)){ $('wInput').focus(); return; }
+  state.weights[current] = Math.round(v*100)/100;
+  save(); $('wInput').blur(); renderWeight(); renderCompare();
+}
+
 /* ---------- 重繪 ---------- */
 function refresh(){
-  renderDateBar(); renderSummary(); renderEntries(); renderChart();
+  renderDateBar(); renderSummary(); renderEntries(); renderWeight(); renderCompare();
 }
 
 /* ---------- 事件 ---------- */
@@ -563,12 +667,11 @@ $('prevDay').onclick = ()=>{ const d=parseYmd(current); d.setDate(d.getDate()-1)
 $('nextDay').onclick = ()=>{ const d=parseYmd(current); d.setDate(d.getDate()+1); current=ymd(d); refresh(); };
 $('todayBtn').onclick = ()=>{ current=todayStr; refresh(); };
 
-$('rangeSeg').addEventListener('click', e=>{
+$('cmpRangeSeg').addEventListener('click', e=>{
   const b = e.target.closest('button'); if(!b) return;
-  const r = parseInt(b.dataset.r,10);
-  state.chartRange = r; save();
-  [...$('rangeSeg').children].forEach(x=>x.classList.toggle('on', x===b));
-  renderChart();
+  state.chartRange = parseInt(b.dataset.r,10); save();
+  [...$('cmpRangeSeg').children].forEach(x=>x.classList.toggle('on', x===b));
+  renderCompare();
 });
 $('dateLabel').onclick = ()=>{ $('datePicker').showPicker ? $('datePicker').showPicker() : $('datePicker').click(); };
 $('datePicker').onchange = (e)=>{ if(e.target.value){ current=e.target.value; refresh(); } };
@@ -576,6 +679,9 @@ $('datePicker').onchange = (e)=>{ if(e.target.value){ current=e.target.value; re
 $('addBtn').onclick = addEntry;
 $('amtInput').addEventListener('input', updateLive);
 $('amtInput').addEventListener('keydown', e=>{ if(e.key==='Enter') addEntry(); });
+
+$('wBtn').onclick = recordWeight;
+$('wInput').addEventListener('keydown', e=>{ if(e.key==='Enter') recordWeight(); });
 
 $('petName').addEventListener('blur', ()=>{
   const v = $('petName').textContent.trim() || '小比';
@@ -587,7 +693,7 @@ $('gearBtn').onclick = ()=>{
   const s=$('settings'); s.classList.toggle('open');
   if(s.classList.contains('open')){ renderSettings(); s.scrollIntoView({behavior:'smooth'}); }
 };
-$('targetInput').onchange = ()=>{ const n=parseInt($('targetInput').value,10); state.target = (n>0)?n:null; save(); renderSummary(); renderChart(); };
+$('targetInput').onchange = ()=>{ const n=parseInt($('targetInput').value,10); state.target = (n>0)?n:null; save(); renderSummary(); renderCompare(); };
 $('addFoodBtn').onclick = ()=>{
   const color = PALETTE[state.foods.length % PALETTE.length];
   state.foods.push({ id:'f'+Date.now(), name:'新食物', kcal:1, unit:'g', color });
@@ -603,13 +709,13 @@ $('importFile').onchange = (e)=>{
   r.readAsText(file);
 };
 $('clearDayBtn').onclick = ()=>{
-  if(confirm(`清空 ${current} 的所有紀錄?`)){ delete state.logs[current]; save(); refresh(); }
+  if(confirm(`清空 ${current} 的進食與體重紀錄?`)){ delete state.logs[current]; delete state.weights[current]; save(); refresh(); }
 };
 
 if(!Store.persistent){ $('saveNote').textContent='⚠️ 目前環境無法永久儲存(下載這個檔案到本機或部署到網站即可正常保存)'; }
 
 /* ---------- 啟動 ---------- */
-[...$('rangeSeg').children].forEach(x=>x.classList.toggle('on', parseInt(x.dataset.r,10)===state.chartRange));
+[...$('cmpRangeSeg').children].forEach(x=>x.classList.toggle('on', parseInt(x.dataset.r,10)===state.chartRange));
 renderFoodOpts();
 refresh();
 </script>
