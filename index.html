@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>小比的進食紀錄</title>
+<style>
+  :root{
+    --bg:#F6F1E9;
+    --paper:#FFFFFF;
+    --ink:#33302A;
+    --muted:#8C8576;
+    --line:#E7DFD2;
+    --accent:#E8826B;      /* 罐罐 / 主要動作 */
+    --milk:#5FА;           /* placeholder, overwritten below */
+    --c-milk:#6CA9C7;
+    --c-can:#E8826B;
+    --c-kibble:#D79B4D;
+    --good:#6FA678;
+    --warn:#C9622F;
+    --shadow:0 1px 2px rgba(51,48,42,.05), 0 6px 20px rgba(51,48,42,.06);
+    --r:16px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    font-family:"PingFang TC","Noto Sans TC","Hiragino Sans GB","Microsoft JhengHei",system-ui,-apple-system,"Segoe UI",sans-serif;
+    background:var(--bg);
+    color:var(--ink);
+    line-height:1.5;
+    -webkit-font-smoothing:antialiased;
+    padding-bottom:48px;
+  }
+  .wrap{max-width:640px;margin:0 auto;padding:20px 16px;}
+
+  /* Header */
+  header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:18px;}
+  .title{display:flex;align-items:center;gap:10px;}
+  .paw{width:38px;height:38px;border-radius:12px;background:var(--accent);display:grid;place-items:center;font-size:20px;flex:none;}
+  h1{font-size:20px;margin:0;font-weight:700;letter-spacing:.3px;}
+  h1 .name{border-bottom:2px dashed transparent;cursor:text;}
+  h1 .name:hover{border-color:var(--line);}
+  .sub{font-size:12px;color:var(--muted);margin-top:1px;}
+  .icon-btn{appearance:none;border:1px solid var(--line);background:var(--paper);border-radius:12px;width:40px;height:40px;font-size:18px;cursor:pointer;color:var(--ink);transition:.15s;flex:none;}
+  .icon-btn:hover{background:#FBF7F0;}
+  .icon-btn:active{transform:scale(.96);}
+
+  /* Date bar */
+  .datebar{display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:16px;}
+  .datebar .d-main{font-weight:700;font-size:16px;min-width:150px;text-align:center;cursor:pointer;}
+  .datebar .d-wk{color:var(--muted);font-weight:500;font-size:13px;margin-left:4px;}
+  .nav{appearance:none;border:none;background:transparent;font-size:22px;color:var(--muted);cursor:pointer;padding:4px 10px;border-radius:10px;line-height:1;}
+  .nav:hover{background:#EDE6DA;color:var(--ink);}
+  #datePicker{position:absolute;opacity:0;width:0;height:0;}
+  .today-pill{font-size:11px;color:var(--accent);border:1px solid var(--accent);border-radius:999px;padding:1px 8px;margin-left:6px;cursor:pointer;}
+
+  /* Summary card */
+  .summary{background:var(--paper);border-radius:var(--r);box-shadow:var(--shadow);padding:18px 18px 16px;margin-bottom:16px;}
+  .total-row{display:flex;align-items:baseline;justify-content:space-between;}
+  .total-num{font-size:38px;font-weight:800;letter-spacing:-1px;line-height:1;}
+  .total-num small{font-size:15px;font-weight:600;color:var(--muted);margin-left:4px;letter-spacing:0;}
+  .target-txt{font-size:13px;color:var(--muted);text-align:right;}
+  .target-txt b{color:var(--ink);}
+  .bar-track{height:8px;border-radius:999px;background:#EDE6DA;margin-top:12px;overflow:hidden;}
+  .bar-fill{height:100%;border-radius:999px;background:var(--good);transition:width .35s ease;}
+  .breakdown{display:flex;gap:6px;margin-top:12px;flex-wrap:wrap;}
+  .chip{font-size:12px;padding:3px 9px;border-radius:999px;background:#F4EEE4;color:var(--ink);display:inline-flex;align-items:center;gap:5px;}
+  .dot{width:8px;height:8px;border-radius:50%;flex:none;}
+
+  /* Add box */
+  .card{background:var(--paper);border-radius:var(--r);box-shadow:var(--shadow);padding:16px;margin-bottom:16px;}
+  .card h2{font-size:14px;margin:0 0 12px;font-weight:700;color:var(--muted);letter-spacing:.5px;}
+  .foods{display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:8px;margin-bottom:12px;}
+  .food-opt{border:1.5px solid var(--line);background:var(--paper);border-radius:12px;padding:10px 8px;cursor:pointer;text-align:center;transition:.15s;}
+  .food-opt:hover{border-color:var(--muted);}
+  .food-opt.on{border-color:var(--sel);background:var(--selbg);}
+  .food-opt .fn{font-size:13px;font-weight:600;}
+  .food-opt .fk{font-size:11px;color:var(--muted);margin-top:2px;}
+  .add-row{display:flex;gap:8px;}
+  .amt{flex:1;display:flex;align-items:center;border:1.5px solid var(--line);border-radius:12px;padding:0 12px;background:var(--paper);}
+  .amt input{flex:1;border:none;outline:none;font-size:18px;padding:11px 0;background:transparent;color:var(--ink);font-weight:600;width:100%;}
+  .amt .unit{color:var(--muted);font-size:14px;font-weight:600;}
+  .amt:focus-within{border-color:var(--accent);}
+  .add-btn{appearance:none;border:none;background:var(--accent);color:#fff;font-size:15px;font-weight:700;border-radius:12px;padding:0 20px;cursor:pointer;transition:.15s;white-space:nowrap;}
+  .add-btn:hover{filter:brightness(1.04);}
+  .add-btn:active{transform:scale(.97);}
+  .live-kcal{font-size:12px;color:var(--muted);margin-top:8px;text-align:center;height:16px;}
+
+  /* Entries */
+  .entries{display:flex;flex-direction:column;gap:8px;}
+  .entry{display:flex;align-items:center;gap:12px;background:var(--paper);border-radius:14px;padding:12px 14px;box-shadow:var(--shadow);}
+  .entry .tag{width:10px;height:36px;border-radius:6px;flex:none;}
+  .entry .e-main{flex:1;min-width:0;}
+  .entry .e-name{font-weight:600;font-size:15px;}
+  .entry .e-meta{font-size:12px;color:var(--muted);}
+  .entry .e-kcal{font-weight:700;font-size:15px;white-space:nowrap;}
+  .entry .e-kcal small{font-size:11px;color:var(--muted);font-weight:600;}
+  .del{appearance:none;border:none;background:transparent;color:var(--muted);font-size:18px;cursor:pointer;padding:4px 6px;border-radius:8px;line-height:1;}
+  .del:hover{color:var(--warn);background:#FBEDE5;}
+  .empty{text-align:center;color:var(--muted);font-size:14px;padding:28px 12px;background:var(--paper);border-radius:14px;box-shadow:var(--shadow);}
+
+  /* Trend chart */
+  .chart{margin-top:6px;}
+  .plot{position:relative;display:flex;align-items:flex-end;justify-content:space-between;gap:6px;height:118px;}
+  .plot.dense{gap:3px;}
+  .col{flex:1;display:flex;align-items:flex-end;justify-content:center;height:100%;cursor:pointer;}
+  .col .bar{position:relative;width:70%;max-width:26px;border-radius:6px 6px 0 0;background:#C7BFB0;min-height:2px;transition:height .35s;}
+  .col .bar .v{position:absolute;top:-15px;left:50%;transform:translateX(-50%);font-size:10px;color:var(--muted);line-height:1;white-space:nowrap;}
+  .plot.dense .v{display:none;}
+  .col .bar.under{background:var(--c-kibble);}
+  .col .bar.met{background:var(--good);}
+  .col .bar.over{background:var(--warn);}
+  .col.is-today .bar{outline:2px solid rgba(51,48,42,.18);outline-offset:1px;}
+  .target-line{position:absolute;left:0;right:0;border-top:2px dashed #B7AE9E;pointer-events:none;}
+  .target-line .tl-tag{position:absolute;right:0;top:-7px;transform:translateY(-100%);font-size:10px;color:var(--muted);background:var(--paper);padding:0 4px;border-radius:4px;}
+  .xrow{display:flex;justify-content:space-between;gap:6px;margin-top:6px;}
+  .xrow.dense{gap:3px;}
+  .xcell{flex:1;text-align:center;font-size:11px;color:var(--muted);}
+  .xcell.is-today{color:var(--accent);font-weight:700;}
+  .xcell.hide{visibility:hidden;}
+
+  .seg{display:inline-flex;background:#EDE6DA;border-radius:10px;padding:3px;gap:2px;}
+  .seg button{appearance:none;border:none;background:transparent;font-size:12px;font-weight:600;color:var(--muted);padding:5px 11px;border-radius:8px;cursor:pointer;font-family:inherit;}
+  .seg button.on{background:var(--paper);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.06);}
+  .chart-foot{font-size:12px;color:var(--muted);text-align:center;margin-top:12px;}
+
+  /* Settings */
+  .settings{display:none;}
+  .settings.open{display:block;}
+  .field{margin-bottom:14px;}
+  .field label{display:block;font-size:12px;color:var(--muted);margin-bottom:5px;font-weight:600;}
+  .field input{width:100%;border:1.5px solid var(--line);border-radius:10px;padding:9px 11px;font-size:15px;outline:none;color:var(--ink);font-family:inherit;}
+  .field input:focus{border-color:var(--accent);}
+  .food-edit{display:flex;gap:6px;align-items:center;margin-bottom:8px;}
+  .food-edit input.fe-name{flex:2;}
+  .food-edit input.fe-k{flex:1;}
+  .food-edit input.fe-u{width:54px;flex:none;text-align:center;}
+  .food-edit input{border:1.5px solid var(--line);border-radius:10px;padding:8px 9px;font-size:14px;outline:none;font-family:inherit;color:var(--ink);min-width:0;}
+  .food-edit input:focus{border-color:var(--accent);}
+  .food-edit .del{font-size:18px;}
+  .ghost-btn{appearance:none;border:1.5px dashed var(--line);background:transparent;color:var(--muted);border-radius:10px;padding:9px;width:100%;cursor:pointer;font-size:14px;font-family:inherit;}
+  .ghost-btn:hover{border-color:var(--accent);color:var(--accent);}
+  .row2{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;}
+  .row2 button{flex:1;min-width:120px;appearance:none;border:1px solid var(--line);background:var(--paper);border-radius:10px;padding:10px;cursor:pointer;font-size:14px;font-family:inherit;color:var(--ink);}
+  .row2 button:hover{background:#FBF7F0;}
+  .danger{color:var(--warn);}
+  .hint{font-size:11px;color:var(--muted);margin-top:-6px;margin-bottom:10px;}
+  .save-note{font-size:11px;color:var(--muted);text-align:center;margin-top:18px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="title">
+      <div class="paw">🐶</div>
+      <div>
+        <h1><span class="name" id="petName" contenteditable="true" spellcheck="false">小比</span> 的進食紀錄</h1>
+        <div class="sub">每天記錄吃了多少，自動換算熱量</div>
+      </div>
+    </div>
+    <button class="icon-btn" id="gearBtn" title="設定">⚙️</button>
+  </header>
+
+  <!-- Date navigation -->
+  <div class="datebar">
+    <button class="nav" id="prevDay">‹</button>
+    <div class="d-main" id="dateLabel" title="點選挑日期">
+      <span id="dateText"></span><span class="d-wk" id="weekText"></span>
+    </div>
+    <button class="nav" id="nextDay">›</button>
+    <input type="date" id="datePicker">
+  </div>
+  <div style="text-align:center;margin-top:-10px;margin-bottom:14px;">
+    <span class="today-pill" id="todayBtn">回到今天</span>
+  </div>
+
+  <!-- Summary -->
+  <div class="summary">
+    <div class="total-row">
+      <div class="total-num"><span id="totalKcal">0</span><small>kcal</small></div>
+      <div class="target-txt" id="targetTxt"></div>
+    </div>
+    <div class="bar-track" id="barTrack" style="display:none;"><div class="bar-fill" id="barFill"></div></div>
+    <div class="breakdown" id="breakdown"></div>
+  </div>
+
+  <!-- Add -->
+  <div class="card">
+    <h2>新增一筆</h2>
+    <div class="foods" id="foodOpts"></div>
+    <div class="add-row">
+      <div class="amt">
+        <input type="number" id="amtInput" inputmode="decimal" min="0" step="any" placeholder="份量">
+        <span class="unit" id="amtUnit">g</span>
+      </div>
+      <button class="add-btn" id="addBtn">記錄</button>
+    </div>
+    <div class="live-kcal" id="liveKcal"></div>
+  </div>
+
+  <!-- Entries -->
+  <div class="entries" id="entries"></div>
+
+  <!-- Weekly chart -->
+  <div class="card" style="margin-top:16px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:8px;">
+      <h2 style="margin:0;">熱量趨勢</h2>
+      <div class="seg" id="rangeSeg">
+        <button data-r="7" class="on">7天</button>
+        <button data-r="14">14天</button>
+        <button data-r="30">30天</button>
+      </div>
+    </div>
+    <div class="chart" id="chart"></div>
+    <div class="chart-foot" id="chartFoot"></div>
+  </div>
+
+  <!-- Settings -->
+  <div class="card settings" id="settings">
+    <h2>設定</h2>
+    <div class="field">
+      <label>每日熱量目標(留空＝不設定)</label>
+      <input type="number" id="targetInput" inputmode="numeric" min="0" placeholder="例如 200">
+    </div>
+    <div class="field">
+      <label>食物與熱量(名稱 ／ kcal每單位 ／ 單位)</label>
+      <div id="foodEdits"></div>
+      <button class="ghost-btn" id="addFoodBtn">＋ 新增食物</button>
+      <div class="hint">修改熱量只影響「之後」新增的紀錄，舊紀錄維持當時的數值。</div>
+    </div>
+    <div class="row2">
+      <button id="exportBtn">匯出 CSV</button>
+      <button id="exportJsonBtn">備份 JSON</button>
+      <button id="importBtn">還原 JSON</button>
+    </div>
+    <div class="row2">
+      <button class="danger" id="clearDayBtn">清空這一天</button>
+    </div>
+    <input type="file" id="importFile" accept="application/json" style="display:none;">
+  </div>
+
+  <div class="save-note" id="saveNote">紀錄會自動儲存在這個瀏覽器中</div>
+</div>
+
+<script>
+/* ---------- 安全儲存:有 localStorage 就用,沒有就用記憶體(預覽也不會壞) ---------- */
+const Store = (() => {
+  let ok = false;
+  try { localStorage.setItem('__t','1'); localStorage.removeItem('__t'); ok = true; } catch(e){ ok = false; }
+  const mem = {};
+  return {
+    persistent: ok,
+    get(k){ try { return ok ? localStorage.getItem(k) : (mem[k] ?? null); } catch(e){ return mem[k] ?? null; } },
+    set(k,v){ try { ok ? localStorage.setItem(k,v) : (mem[k]=v); } catch(e){ mem[k]=v; } }
+  };
+})();
+const KEY = 'xiaobi_food_log_v1';
+
+/* ---------- 預設資料 ---------- */
+const DEFAULT_FOODS = [
+  { id:'milk',   name:'皇家低脂營養奶', kcal:1,    unit:'ml', color:'#6CA9C7' },
+  { id:'can',    name:'皇家低脂罐罐',   kcal:0.72, unit:'g',  color:'#E8826B' },
+  { id:'kibble', name:'皇家低脂飼料',   kcal:3.5,  unit:'g',  color:'#D79B4D' },
+];
+const PALETTE = ['#6CA9C7','#E8826B','#D79B4D','#6FA678','#A47BBF','#C98AA6','#7E9AA6'];
+
+function loadState(){
+  let s = null;
+  try { s = JSON.parse(Store.get(KEY)); } catch(e){ s = null; }
+  if(!s || typeof s !== 'object') s = {};
+  if(!Array.isArray(s.foods) || s.foods.length === 0) s.foods = JSON.parse(JSON.stringify(DEFAULT_FOODS));
+  if(typeof s.petName !== 'string') s.petName = '小比';
+  if(!s.migratedV2){ if(s.target == null) s.target = 200; s.migratedV2 = true; }
+  if(!s.logs || typeof s.logs !== 'object') s.logs = {};
+  if(![7,14,30].includes(s.chartRange)) s.chartRange = 7;
+  return s;
+}
+let state = loadState();
+function save(){ Store.set(KEY, JSON.stringify(state)); }
+
+/* ---------- 日期工具 ---------- */
+const WK = ['週日','週一','週二','週三','週四','週五','週六'];
+function ymd(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function parseYmd(s){ const [y,m,d]=s.split('-').map(Number); return new Date(y,m-1,d); }
+let current = ymd(new Date());
+const todayStr = ymd(new Date());
+
+/* ---------- 計算 ---------- */
+function foodById(id){ return state.foods.find(f=>f.id===id) || null; }
+function dayLog(date){ return state.logs[date] || []; }
+function dayTotal(date){ return dayLog(date).reduce((s,e)=>s+e.kcal,0); }
+
+/* 依目標判斷達標狀態(±10% 視為達標) */
+function statusFor(total, target){
+  if(!target || target<=0) return null;
+  const diff = total - target;
+  if(total < target*0.9) return { key:'under', diff, label:`還差 ${Math.round(target-total)} kcal` };
+  if(total > target*1.1) return { key:'over',  diff, label:`超過 ${Math.round(total-target)} kcal` };
+  return { key:'met', diff, label: diff>=0 ? '達標 ✓' : `差一點達標(${Math.round(target-total)}）` };
+}
+
+/* ---------- 新增表單狀態 ---------- */
+let selectedFood = state.foods[0] ? state.foods[0].id : null;
+
+/* ---------- 畫面 ---------- */
+const $ = id => document.getElementById(id);
+
+function renderDateBar(){
+  const d = parseYmd(current);
+  $('dateText').textContent = `${d.getMonth()+1}月${d.getDate()}日`;
+  $('weekText').textContent = WK[d.getDay()];
+  $('todayBtn').style.display = (current === todayStr) ? 'none' : '';
+  $('datePicker').value = current;
+}
+
+function renderSummary(){
+  const total = dayTotal(current);
+  $('totalKcal').textContent = Math.round(total*10)/10;
+  // breakdown
+  const byFood = {};
+  dayLog(current).forEach(e=>{ byFood[e.foodId] = (byFood[e.foodId]||0) + e.kcal; });
+  const bd = $('breakdown'); bd.innerHTML='';
+  Object.keys(byFood).forEach(fid=>{
+    const f = foodById(fid);
+    const c = f ? f.color : '#999';
+    const nm = f ? f.name.replace(/^皇家低脂/,'') : '已刪除';
+    const chip = document.createElement('span');
+    chip.className='chip';
+    chip.innerHTML = `<span class="dot" style="background:${c}"></span>${nm} ${Math.round(byFood[fid])}`;
+    bd.appendChild(chip);
+  });
+  // target / 差額警示
+  const t = state.target;
+  if(t && t>0){
+    $('barTrack').style.display='';
+    const st = statusFor(total, t);
+    const colorMap = { under:'var(--c-kibble)', met:'var(--good)', over:'var(--warn)' };
+    const c = colorMap[st.key];
+    const pct = Math.min(100, total/t*100);
+    const fill = $('barFill');
+    fill.style.width = pct+'%';
+    fill.style.background = c;
+    $('targetTxt').innerHTML =
+      `<span style="color:${c};font-weight:700;font-size:14px;">${st.label}</span>` +
+      `<br><span style="font-size:11px;">已 ${Math.round(total)} / 目標 ${t}</span>`;
+  } else {
+    $('barTrack').style.display='none';
+    $('targetTxt').textContent='';
+  }
+}
+
+function renderFoodOpts(){
+  const box = $('foodOpts'); box.innerHTML='';
+  if(!selectedFood && state.foods[0]) selectedFood = state.foods[0].id;
+  state.foods.forEach(f=>{
+    const el = document.createElement('div');
+    el.className='food-opt'+(f.id===selectedFood?' on':'');
+    el.style.setProperty('--sel', f.color);
+    el.style.setProperty('--selbg', f.color+'1A');
+    el.innerHTML = `<div class="fn">${f.name.replace(/^皇家低脂/,'')}</div><div class="fk">${f.kcal} kcal/${f.unit}</div>`;
+    el.onclick = ()=>{ selectedFood=f.id; renderFoodOpts(); updateUnit(); updateLive(); $('amtInput').focus(); };
+    box.appendChild(el);
+  });
+  updateUnit();
+}
+function updateUnit(){
+  const f = foodById(selectedFood);
+  $('amtUnit').textContent = f ? f.unit : '';
+}
+function updateLive(){
+  const f = foodById(selectedFood);
+  const v = parseFloat($('amtInput').value);
+  if(f && v>0){ $('liveKcal').textContent = `${v} ${f.unit} ＝ ${Math.round(v*f.kcal*10)/10} kcal`; }
+  else $('liveKcal').textContent='';
+}
+
+function renderEntries(){
+  const box = $('entries'); box.innerHTML='';
+  const log = dayLog(current);
+  if(log.length===0){
+    box.innerHTML = `<div class="empty">這天還沒有紀錄，選食物、輸入份量就可以了 🍽️</div>`;
+    return;
+  }
+  log.slice().reverse().forEach(e=>{
+    const f = foodById(e.foodId);
+    const c = f ? f.color : '#bbb';
+    const nm = e.foodName || (f?f.name:'已刪除食物');
+    const el = document.createElement('div');
+    el.className='entry';
+    el.innerHTML = `
+      <div class="tag" style="background:${c}"></div>
+      <div class="e-main">
+        <div class="e-name">${nm}</div>
+        <div class="e-meta">${e.amount} ${e.unit||''}${e.time?' ・ '+e.time:''}</div>
+      </div>
+      <div class="e-kcal">${Math.round(e.kcal*10)/10}<small> kcal</small></div>
+      <button class="del" title="刪除">✕</button>`;
+    el.querySelector('.del').onclick = ()=>{ removeEntry(e.id); };
+    box.appendChild(el);
+  });
+}
+
+function renderChart(){
+  const box = $('chart'); box.innerHTML='';
+  const range = state.chartRange || 7;
+  const dense = range > 7;
+  const target = state.target && state.target>0 ? state.target : null;
+
+  const days=[];
+  const base = parseYmd(current);
+  for(let i=range-1;i>=0;i--){ const d=new Date(base); d.setDate(base.getDate()-i); days.push(d); }
+  const totals = days.map(d=>dayTotal(ymd(d)));
+  // 讓目標線一定在圖內:上限取「最大值」與「目標」較大者,再留一點頭部空間
+  const scaleMax = Math.max(...totals, target||0, 1) * 1.12;
+  const step = range<=7 ? 1 : (range<=14 ? 2 : 5);
+
+  // 繪圖區
+  const plot = document.createElement('div');
+  plot.className = 'plot' + (dense?' dense':'');
+  days.forEach((d,i)=>{
+    const t = totals[i];
+    const isToday = ymd(d)===todayStr;
+    const h = Math.round(t/scaleMax*100);
+    const st = statusFor(t, target);
+    const cls = (t>0 && st) ? ' '+st.key : '';
+    const col = document.createElement('div');
+    col.className='col'+(isToday?' is-today':'');
+    col.title = `${d.getMonth()+1}/${d.getDate()}  ${Math.round(t)} kcal` + (st? ' ・ '+st.label.replace(/<[^>]+>/g,'') : '');
+    col.innerHTML = `<div class="bar${cls}" style="height:${t?Math.max(h,3):0}%">${t?`<span class="v">${Math.round(t)}</span>`:''}</div>`;
+    col.onclick = ()=>{ current=ymd(d); refresh(); };
+    plot.appendChild(col);
+  });
+  // 目標虛線
+  if(target){
+    const line = document.createElement('div');
+    line.className='target-line';
+    line.style.bottom = (target/scaleMax*100)+'%';
+    line.innerHTML = `<span class="tl-tag">目標 ${target}</span>`;
+    plot.appendChild(line);
+  }
+  box.appendChild(plot);
+
+  // x 軸日期
+  const xrow = document.createElement('div');
+  xrow.className='xrow'+(dense?' dense':'');
+  days.forEach((d,i)=>{
+    const isToday = ymd(d)===todayStr;
+    const show = (i%step===0) || isToday || i===days.length-1;
+    const cell = document.createElement('div');
+    cell.className='xcell'+(isToday?' is-today':'')+(show?'':' hide');
+    cell.textContent = `${d.getMonth()+1}/${d.getDate()}`;
+    xrow.appendChild(cell);
+  });
+  box.appendChild(xrow);
+
+  // 期間統計
+  const eaten = totals.filter(t=>t>0);
+  const avgAll = totals.reduce((s,t)=>s+t,0)/range;
+  let footer;
+  if(!eaten.length){
+    footer = `這 ${range} 天還沒有紀錄`;
+  } else {
+    footer = `平均 ${Math.round(avgAll)} kcal/天`;
+    if(target){
+      const metDays = totals.filter(t=>t>=target*0.9 && t<=target*1.1).length;
+      footer += `・達標 ${metDays}/${range} 天`;
+    }
+  }
+  $('chartFoot').textContent = footer;
+}
+
+/* ---------- 動作 ---------- */
+function addEntry(){
+  const f = foodById(selectedFood);
+  const v = parseFloat($('amtInput').value);
+  if(!f){ return; }
+  if(!(v>0)){ $('amtInput').focus(); return; }
+  if(!state.logs[current]) state.logs[current]=[];
+  const now = new Date();
+  state.logs[current].push({
+    id: Date.now()+''+Math.floor(Math.random()*1000),
+    foodId: f.id,
+    foodName: f.name,
+    amount: v,
+    unit: f.unit,
+    kcal: v*f.kcal,
+    time: (current===todayStr)? String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0') : ''
+  });
+  save();
+  $('amtInput').value='';
+  updateLive();
+  refresh();
+}
+function removeEntry(eid){
+  state.logs[current] = dayLog(current).filter(e=>e.id!==eid);
+  if(state.logs[current].length===0) delete state.logs[current];
+  save(); refresh();
+}
+
+/* ---------- 設定區 ---------- */
+function renderSettings(){
+  $('targetInput').value = state.target || '';
+  $('petName').textContent = state.petName;
+  const box = $('foodEdits'); box.innerHTML='';
+  state.foods.forEach((f,idx)=>{
+    const row = document.createElement('div');
+    row.className='food-edit';
+    row.innerHTML = `
+      <input class="fe-name" value="${f.name.replace(/"/g,'&quot;')}" placeholder="名稱">
+      <input class="fe-k" type="number" step="any" min="0" value="${f.kcal}" placeholder="kcal">
+      <input class="fe-u" value="${f.unit}" placeholder="單位">
+      <button class="del" title="刪除">🗑</button>`;
+    const [nameI,kI,uI] = row.querySelectorAll('input');
+    nameI.onchange = ()=>{ f.name=nameI.value.trim()||f.name; save(); renderFoodOpts(); renderSummary(); };
+    kI.onchange    = ()=>{ const n=parseFloat(kI.value); if(n>=0){f.kcal=n; save(); renderFoodOpts();} };
+    uI.onchange    = ()=>{ f.unit=uI.value.trim()||f.unit; save(); renderFoodOpts(); };
+    row.querySelector('.del').onclick = ()=>{
+      if(state.foods.length<=1){ alert('至少保留一種食物'); return; }
+      if(confirm(`刪除「${f.name}」?(已記錄的舊資料不受影響)`)){
+        state.foods.splice(idx,1);
+        if(selectedFood===f.id) selectedFood=state.foods[0].id;
+        save(); renderSettings(); renderFoodOpts();
+      }
+    };
+    box.appendChild(row);
+  });
+}
+
+/* ---------- 匯出 / 備份 ---------- */
+function download(name, content, type){
+  const blob = new Blob([content], {type});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href=url; a.download=name; a.click();
+  setTimeout(()=>URL.revokeObjectURL(url), 1000);
+}
+function exportCSV(){
+  let rows = [['日期','食物','份量','單位','熱量(kcal)','時間']];
+  Object.keys(state.logs).sort().forEach(date=>{
+    state.logs[date].forEach(e=>{
+      rows.push([date, e.foodName||'', e.amount, e.unit||'', Math.round(e.kcal*100)/100, e.time||'']);
+    });
+  });
+  const csv = '\uFEFF'+rows.map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
+  download(`${state.petName}_進食紀錄_${todayStr}.csv`, csv, 'text/csv;charset=utf-8');
+}
+
+/* ---------- 重繪 ---------- */
+function refresh(){
+  renderDateBar(); renderSummary(); renderEntries(); renderChart();
+}
+
+/* ---------- 事件 ---------- */
+$('prevDay').onclick = ()=>{ const d=parseYmd(current); d.setDate(d.getDate()-1); current=ymd(d); refresh(); };
+$('nextDay').onclick = ()=>{ const d=parseYmd(current); d.setDate(d.getDate()+1); current=ymd(d); refresh(); };
+$('todayBtn').onclick = ()=>{ current=todayStr; refresh(); };
+
+$('rangeSeg').addEventListener('click', e=>{
+  const b = e.target.closest('button'); if(!b) return;
+  const r = parseInt(b.dataset.r,10);
+  state.chartRange = r; save();
+  [...$('rangeSeg').children].forEach(x=>x.classList.toggle('on', x===b));
+  renderChart();
+});
+$('dateLabel').onclick = ()=>{ $('datePicker').showPicker ? $('datePicker').showPicker() : $('datePicker').click(); };
+$('datePicker').onchange = (e)=>{ if(e.target.value){ current=e.target.value; refresh(); } };
+
+$('addBtn').onclick = addEntry;
+$('amtInput').addEventListener('input', updateLive);
+$('amtInput').addEventListener('keydown', e=>{ if(e.key==='Enter') addEntry(); });
+
+$('petName').addEventListener('blur', ()=>{
+  const v = $('petName').textContent.trim() || '小比';
+  $('petName').textContent = v; state.petName=v; save();
+});
+$('petName').addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); $('petName').blur(); } });
+
+$('gearBtn').onclick = ()=>{
+  const s=$('settings'); s.classList.toggle('open');
+  if(s.classList.contains('open')){ renderSettings(); s.scrollIntoView({behavior:'smooth'}); }
+};
+$('targetInput').onchange = ()=>{ const n=parseInt($('targetInput').value,10); state.target = (n>0)?n:null; save(); renderSummary(); renderChart(); };
+$('addFoodBtn').onclick = ()=>{
+  const color = PALETTE[state.foods.length % PALETTE.length];
+  state.foods.push({ id:'f'+Date.now(), name:'新食物', kcal:1, unit:'g', color });
+  save(); renderSettings(); renderFoodOpts();
+};
+$('exportBtn').onclick = exportCSV;
+$('exportJsonBtn').onclick = ()=> download(`${state.petName}_備份_${todayStr}.json`, JSON.stringify(state,null,2), 'application/json');
+$('importBtn').onclick = ()=> $('importFile').click();
+$('importFile').onchange = (e)=>{
+  const file=e.target.files[0]; if(!file) return;
+  const r=new FileReader();
+  r.onload=()=>{ try{ const data=JSON.parse(r.result); if(data && data.logs){ state=Object.assign(loadState(), data); selectedFood=state.foods[0].id; save(); renderFoodOpts(); renderSettings(); refresh(); alert('還原完成'); } else alert('檔案格式不正確'); }catch(err){ alert('讀取失敗:'+err.message);} };
+  r.readAsText(file);
+};
+$('clearDayBtn').onclick = ()=>{
+  if(confirm(`清空 ${current} 的所有紀錄?`)){ delete state.logs[current]; save(); refresh(); }
+};
+
+if(!Store.persistent){ $('saveNote').textContent='⚠️ 目前環境無法永久儲存(下載這個檔案到本機或部署到網站即可正常保存)'; }
+
+/* ---------- 啟動 ---------- */
+[...$('rangeSeg').children].forEach(x=>x.classList.toggle('on', parseInt(x.dataset.r,10)===state.chartRange));
+renderFoodOpts();
+refresh();
+</script>
+</body>
+</html>
